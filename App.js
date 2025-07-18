@@ -8,39 +8,44 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import Login from "./Components/Screens/Login";
 import Messaging from "./Components/Screens/Messaging";
 import Chat from "./Components/Screens/Chat";
+import ServerRetryComponent from "./Components/Utils/ServerRetryComponent";
 
 import { initializeSocket } from "./Components/Utils/socket";
 
+
+
+
+
 const Stack = createNativeStackNavigator();
-
-
-
-
 
 export default function App() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [serverFound, setServerFound] = useState(false);
+	const [showRetry, setShowRetry] = useState(false);
 	const [error, setError] = useState(null);
 
+	const attemptConnection = async () => {
+		try {
+			setIsLoading(true);
+			setError(null);
+			setShowRetry(false);
+
+			await initializeSocket();
+			setServerFound(true);
+
+		} catch (error) {
+			console.error('Fallo al conectar con el servidor:', error);
+
+			// Mostrar pantalla de reintento en lugar del error
+			setShowRetry(true);
+			setServerFound(false);
+		} finally {
+			setIsLoading(false);
+		}
+	};
+
 	useEffect(() => {
-		const setupConnection = async () => {
-			try {
-				setIsLoading(true);
-				setError(null);
-
-				await initializeSocket();
-				setServerFound(true);
-
-			} catch (error) {
-				console.error('Fallo al conectar con el servidor:', error);
-				setError('No se pudo conectar al servidor. Verifica tu conexión a internet.');
-				setServerFound(false);
-			} finally {
-				setIsLoading(false);
-			}
-		};
-
-		setupConnection();
+		attemptConnection();
 	}, []);
 
 	if (isLoading) {
@@ -51,6 +56,14 @@ export default function App() {
 					<Text style={styles.loadingText}>Conectando al servidor...</Text>
 					<Text style={styles.loadingSubText}>Esto puede tomar unos segundos</Text>
 				</View>
+			</SafeAreaProvider>
+		);
+	}
+
+	if (showRetry) {
+		return (
+			<SafeAreaProvider>
+				<ServerRetryComponent onRetry={attemptConnection} />
 			</SafeAreaProvider>
 		);
 	}
