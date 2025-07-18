@@ -40,6 +40,25 @@ const generatePIN = () => {
     return pin;
 };
 
+const expireRoom = (roomId) => {
+    const roomIndex = chatRooms.findIndex(room => room.id === roomId);
+    if (roomIndex !== -1) {
+        const room = chatRooms[roomIndex];
+        console.log(`[!!] Expirando sala: ${room.name} (ID: ${roomId})`);
+
+        // Notificar a todos los usuarios de la sala
+        io.to(room.name).emit("roomExpired", roomId);
+
+        // Eliminar la sala del array
+        chatRooms.splice(roomIndex, 1);
+
+        // Notificar cambios a todos los usuarios
+        io.emit("roomsList", chatRooms);
+
+        console.log(`[OK] Sala eliminada: ${room.name}`);
+    }
+};
+
 
 
 
@@ -49,7 +68,7 @@ let chatRooms = [];
 
 // Eventos de Socket.IO
 io.on("connection", (socket) => {
-    console.log(`⚡: Usuario ${socket.id} conectado`);
+    console.log(`[OK] Usuario ${socket.id} conectado`);
 
     // Enviar lista de salas al conectarse
     socket.emit("roomsList", chatRooms);
@@ -59,28 +78,39 @@ io.on("connection", (socket) => {
         const { name, creator } = data;
         const roomId = generateID();
         const roomPin = generatePIN();
-        
+
         const newRoom = {
             id: roomId,
             name,
             pin: roomPin,
             creator,
             members: [creator],
-            messages: []
+            messages: [],
+            createdAt: new Date().toISOString()
         };
-        
+
         socket.join(name);
         chatRooms.unshift(newRoom);
-        
+
+        // Programar eliminación automática después de 30 minutos
+        setTimeout(() => {
+            expireRoom(roomId);
+        }, 30 * 60 * 1000);
+
         socket.emit("roomCreated", { success: true, room: newRoom });
         io.emit("roomsList", chatRooms);
+    });
+
+    // Expirar sala manualmente
+    socket.on("expireRoom", (roomId) => {
+        expireRoom(roomId);
     });
 
     // Unirse a una sala
     socket.on("joinRoom", (data) => {
         const { pin, username } = data;
         const room = chatRooms.find(r => r.pin === pin);
-        
+
         if (room) {
             if (!room.members.includes(username)) {
                 room.members.push(username);
@@ -96,10 +126,10 @@ io.on("connection", (socket) => {
     // Obtener salas del usuario
     socket.on("getUserRooms", (username) => {
         const myRooms = chatRooms.filter(room => room.creator === username);
-        const joinedRooms = chatRooms.filter(room => 
+        const joinedRooms = chatRooms.filter(room =>
             room.members.includes(username) && room.creator !== username
         );
-        
+
         socket.emit("userRooms", { myRooms, joinedRooms });
     });
 
@@ -116,7 +146,7 @@ io.on("connection", (socket) => {
     socket.on("newMessage", (data) => {
         const { room_id, message, user, timestamp } = data;
         let result = chatRooms.filter((room) => room.id == room_id);
-        
+
         if (result.length > 0) {
             const newMessage = {
                 id: generateID(),
@@ -124,12 +154,12 @@ io.on("connection", (socket) => {
                 user,
                 time: `${timestamp.hour}:${timestamp.mins}`,
             };
-            
+
             console.log("Nuevo mensaje:", newMessage);
-            
+
             socket.to(result[0].name).emit("roomMessage", newMessage);
             socket.emit("roomMessage", newMessage);
-            
+
             result[0].messages.push(newMessage);
             io.emit("roomsList", chatRooms);
         }
@@ -140,6 +170,21 @@ io.on("connection", (socket) => {
         console.log("[!!] - Usuario desconectado");
     });
 });
+
+// Verificar salas expiradas cada minuto
+setInterval(() => {
+    const now = new Date().getTime();
+    const expiredRooms = chatRooms.filter(room => {
+        const created = new Date(room.createdAt).getTime();
+        const timeDiff = now - created;
+        return timeDiff >= (30 * 60 * 1000); // 30 minutos
+    });
+
+    expiredRooms.forEach(room => {
+        console.log(`[...] Auto-expirando sala: ${room.name}`);
+        expireRoom(room.id);
+    });
+}, 60000); // Verificar cada minuto
 
 
 
