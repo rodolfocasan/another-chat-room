@@ -192,14 +192,17 @@ setInterval(() => {
 
 // Rutas de la API
 app.get("/api", (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
     res.json(chatRooms);
 });
 
 app.get("/ok", (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
     res.json("OK");
 });
 
 app.get("/", (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
     res.json({ message: "[OK] - Servidor de chat funcionando!" });
 });
 
